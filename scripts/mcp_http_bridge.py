@@ -1,35 +1,42 @@
 #!/usr/bin/env python3
 """stdio <-> HTTP MCP 桥：把远程 HTTP/SSE MCP 变成本地 stdio MCP。
 用法：python scripts/mcp_http_bridge.py <MCP_URL>"""
-import sys, json, urllib.request
+import sys, json, urllib.request, time
 
 URL = sys.argv[1].strip()
 
 def send_http(req_obj):
     body = json.dumps(req_obj, ensure_ascii=False).encode()
-    r = urllib.request.Request(URL, data=body, headers={
-        "Content-Type": "application/json",
-        "Accept": "application/json, text/event-stream",
-    })
-    with urllib.request.urlopen(r, timeout=180) as resp:
-        ct = resp.headers.get("Content-Type", "")
-        data = resp.read().decode("utf-8", "replace")
-    if "text/event-stream" in ct:
-        for line in data.split(chr(10)):
-            line = line.strip()
-            if not line.startswith("data:"):
-                continue
-            payload = line[5:].strip()
-            if not payload or payload == "[DONE]":
-                continue
-            try:
-                obj = json.loads(payload)
-                if isinstance(obj, dict) and "jsonrpc" in obj:
-                    return obj
-            except Exception:
-                pass
-        return None
-    return json.loads(data)
+    last = None
+    for i in range(40):
+        try:
+            r = urllib.request.Request(URL, data=body, headers={
+                "Content-Type": "application/json",
+                "Accept": "application/json, text/event-stream",
+            })
+            with urllib.request.urlopen(r, timeout=45) as resp:
+                ct = resp.headers.get("Content-Type", "")
+                data = resp.read().decode("utf-8", "replace")
+            if "text/event-stream" in ct:
+                for line in data.split(chr(10)):
+                    line = line.strip()
+                    if not line.startswith("data:"):
+                        continue
+                    payload = line[5:].strip()
+                    if not payload or payload == "[DONE]":
+                        continue
+                    try:
+                        obj = json.loads(payload)
+                        if isinstance(obj, dict) and "jsonrpc" in obj:
+                            return obj
+                    except Exception:
+                        pass
+                return None
+            return json.loads(data)
+        except Exception as e:
+            last = e
+            time.sleep(8)
+    raise last
 
 def out(obj):
     sys.stdout.write(json.dumps(obj, ensure_ascii=False) + chr(10))
