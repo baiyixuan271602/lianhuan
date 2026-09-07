@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "spicy-monopoly": {
+      "command": "python",
+      "args": ["scripts/mcp_http_bridge.py", "https://spicy-monopoly-mcp.onrender.com/mcp"],
+      "env": {}
+    },
+    "zhangxinchuang": {
+      "command": "python",
+      "args": ["scripts/mcp_http_bridge.py", "https://zhangxinchuang-mcp-3mdm.onrender.com/mcp"],
+      "env": {}
+    }
+  }
+}
