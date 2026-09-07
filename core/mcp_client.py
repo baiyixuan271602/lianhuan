@@ -74,23 +74,33 @@ class _Server:
         self._lock = asyncio.Lock()
 
     async def start(self) -> None:
-        try:
-            env = dict(os.environ)
-            env.update(self.spec.get("env") or {})
-            self.proc = await asyncio.create_subprocess_exec(
-                self.spec["command"], *(self.spec.get("args") or []),
-                stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.DEVNULL, env=env,
-                limit=8 * 1024 * 1024)
-            await self._rpc("initialize", {
-                "protocolVersion": "2024-11-05", "capabilities": {},
-                "clientInfo": {"name": "lianhuan", "version": "0.1"}}, timeout=20)
-            await self._notify("notifications/initialized")
-            r = await self._rpc("tools/list", {}, timeout=20)
-            self.tools = (r or {}).get("tools") or []
-        except Exception as e:
-            self.err = f"{type(e).__name__}: {e}"[:160]
+        # 远程 MCP 冷启动可能要几十秒，失败自动重试（最多 4 次、间隔 15 秒）。
+        last = ""
+        for attempt in range(4):
+            try:
+                env = dict(os.environ)
+                env.update(self.spec.get("env") or {})
+                self.proc = await asyncio.create_subprocess_exec(
+                    self.spec["command"], *(self.spec.get("args") or []),
+                    stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.DEVNULL, env=env,
+                    limit=8 * 1024 * 1024)
+                await self._rpc("initialize", {
+                    "protocolVersion": "2024-11-05", "capabilities": {},
+                    "clientInfo": {"name": "lianhuan", "version": "0.1"}}, timeout=25)
+                await self._notify("notifications/initialized")
+                r = await self._rpc("tools/list", {}, timeout=25)
+                self.tools = (r or {}).get("tools") or []
+                if self.tools:
+                    self.err = ""
+                    return
+                last = "工具清单为空"
+            except Exception as e:
+                last = f"{type(e).__name__}: {e}"[:160]
             await self.close()
+            if attempt < 3:
+                await asyncio.sleep(15)
+        self.err = last
 
     async def _send(self, msg: dict) -> None:
         self.proc.stdin.write((json.dumps(msg, ensure_ascii=False) + "\n").encode())
@@ -143,9 +153,14 @@ class _Server:
 
 
 async def start_all() -> None:
+    # 后台连接：不阻塞服务启动。远程 MCP 冷启动慢，让它们慢慢连好。
+    asyncio.get_running_loop().create_task(_start_all_bg())
+
+
+async def _start_all_bg() -> None:
     for name, spec in load_cfg().items():
-        old = _servers.get(name)
         # 安装好一个之前失败的 server 后要能重试；配置换了也不能继续守着旧进程。
+        old = _servers.get(name)
         if old and old.tools and old.spec == spec:
             continue
         if old:
