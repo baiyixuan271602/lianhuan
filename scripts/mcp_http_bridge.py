@@ -45,18 +45,30 @@ def out(obj):
 
 def _heartbeat() -> None:
     # 每 10 分钟轻量 ping 一次上游，防 Render 免费档 15 分钟休眠。
+    # KEEPALIVE_URL 是给"MCP 背后还有一层后端"的情况：两个一起保活。
     import threading
+    import os
+    keep = os.environ.get("KEEPALIVE_URL", "")
+    targets = [URL]
+    if keep:
+        targets.append(keep)
+
     def beat():
         while True:
             time.sleep(600)
-            try:
-                req = urllib.request.Request(URL, data=b'{"jsonrpc":"2.0","method":"ping"}',
-                                             headers={"Content-Type": "application/json",
-                                                      "Accept": "application/json, text/event-stream"})
-                with urllib.request.urlopen(req, timeout=20) as resp:
-                    resp.read()
-            except Exception:
-                pass
+            for u in targets:
+                try:
+                    if u == URL:
+                        data = b'{"jsonrpc":"2.0","method":"ping"}'
+                        req = urllib.request.Request(u, data=data,
+                                                     headers={"Content-Type": "application/json",
+                                                              "Accept": "application/json, text/event-stream"})
+                    else:
+                        req = urllib.request.Request(u, method="GET")
+                    with urllib.request.urlopen(req, timeout=20) as resp:
+                        resp.read()
+                except Exception:
+                    pass
     threading.Thread(target=beat, daemon=True).start()
 
 def main():
