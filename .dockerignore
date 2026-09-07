@@ -3,6 +3,7 @@
 node_modules
 **/node_modules
 data
+!data/mcp.json
 .env
 .env.*
 !.env.example
