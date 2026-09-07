@@ -133,7 +133,7 @@ class _Server:
                     return d.get("result") or {}
 
     async def call(self, tool: str, args: dict) -> dict:
-        r = await self._rpc("tools/call", {"name": tool, "arguments": args})
+        r = await self._rpc("tools/call", {"name": tool, "arguments": args}, timeout=120)
         # 把 content 摊平成文本，喂回模型
         out = []
         for c in (r or {}).get("content") or []:
