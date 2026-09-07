@@ -87,9 +87,9 @@ class _Server:
                     limit=8 * 1024 * 1024)
                 await self._rpc("initialize", {
                     "protocolVersion": "2024-11-05", "capabilities": {},
-                    "clientInfo": {"name": "lianhuan", "version": "0.1"}}, timeout=25)
+                    "clientInfo": {"name": "lianhuan", "version": "0.1"}}, timeout=120)
                 await self._notify("notifications/initialized")
-                r = await self._rpc("tools/list", {}, timeout=25)
+                r = await self._rpc("tools/list", {}, timeout=120)
                 self.tools = (r or {}).get("tools") or []
                 if self.tools:
                     self.err = ""
@@ -152,9 +152,28 @@ class _Server:
                 pass
 
 
+_WATCHDOG = False
+
+
 async def start_all() -> None:
     # 后台连接：不阻塞服务启动。远程 MCP 冷启动慢，让它们慢慢连好。
+    global _WATCHDOG
     asyncio.get_running_loop().create_task(_start_all_bg())
+    if not _WATCHDOG:
+        _WATCHDOG = True
+        asyncio.get_running_loop().create_task(_watchdog())
+
+
+async def _watchdog() -> None:
+    # 看门狗：没连上的 server 每 45 秒自动重连一次，直到连上。
+    while True:
+        await asyncio.sleep(45)
+        for name, s in list(_servers.items()):
+            if not s.tools and s.proc is None:
+                try:
+                    await s.start()
+                except Exception:
+                    pass
 
 
 async def _start_all_bg() -> None:
