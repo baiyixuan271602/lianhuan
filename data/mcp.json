@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "spicy-monopoly": {
+      "command": "python",
+      "args": ["scripts/mcp_http_bridge.py", "https://spicy-monopoly-mcp.onrender.com/mcp"],
+      "env": {}
+    }
+  }
+}
