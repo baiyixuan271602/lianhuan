@@ -42,7 +42,25 @@ def out(obj):
     sys.stdout.write(json.dumps(obj, ensure_ascii=False) + chr(10))
     sys.stdout.flush()
 
+
+def _heartbeat() -> None:
+    # 每 10 分钟轻量 ping 一次上游，防 Render 免费档 15 分钟休眠。
+    import threading
+    def beat():
+        while True:
+            time.sleep(600)
+            try:
+                req = urllib.request.Request(URL, data=b'{"jsonrpc":"2.0","method":"ping"}',
+                                             headers={"Content-Type": "application/json",
+                                                      "Accept": "application/json, text/event-stream"})
+                with urllib.request.urlopen(req, timeout=20) as resp:
+                    resp.read()
+            except Exception:
+                pass
+    threading.Thread(target=beat, daemon=True).start()
+
 def main():
+    _heartbeat()
     for line in sys.stdin:
         line = line.strip()
         if not line:
