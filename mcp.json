@@ -8,7 +8,9 @@
     "zhangxinchuang": {
       "command": "python",
       "args": ["scripts/mcp_http_bridge.py", "https://zhangxinchuang-mcp-3mdm.onrender.com/mcp"],
-      "env": {}
+      "env": {
+        "KEEPALIVE_URL": "https://zhangxinchuang-server-unno.onrender.com/health"
+      }
     }
   }
 }
