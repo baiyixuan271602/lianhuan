@@ -19,6 +19,9 @@ _servers: dict = {}          # name -> _Server
 
 
 def _cfg_file() -> Path:
+    alt = Path("mcp.json")
+    if alt.exists():
+        return alt
     return Path(os.environ.get("LIANHUAN_DB", "data/lianhuan.db")).parent / "mcp.json"
 
 
