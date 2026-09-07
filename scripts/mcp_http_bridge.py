@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """stdio <-> HTTP MCP 桥：把远程 HTTP/SSE MCP 变成本地 stdio MCP。
-用法：python scripts/mcp_http_bridge.py <MCP_URL>
-安全：只转发本进程收到的 JSON-RPC 行，不读任何本地文件。"""
+用法：python scripts/mcp_http_bridge.py <MCP_URL>"""
 import sys, json, urllib.request
 
 URL = sys.argv[1].strip()
@@ -16,8 +15,7 @@ def send_http(req_obj):
         ct = resp.headers.get("Content-Type", "")
         data = resp.read().decode("utf-8", "replace")
     if "text/event-stream" in ct:
-        for line in data.split("
-"):
+        for line in data.split(chr(10)):
             line = line.strip()
             if not line.startswith("data:"):
                 continue
@@ -34,8 +32,7 @@ def send_http(req_obj):
     return json.loads(data)
 
 def out(obj):
-    sys.stdout.write(json.dumps(obj, ensure_ascii=False) + "
-")
+    sys.stdout.write(json.dumps(obj, ensure_ascii=False) + chr(10))
     sys.stdout.flush()
 
 def main():
@@ -48,7 +45,7 @@ def main():
         except Exception:
             continue
         if not isinstance(req, dict) or "id" not in req:
-            continue  # 通知类，不要求响应
+            continue
         try:
             resp = send_http(req)
             if resp is None:
