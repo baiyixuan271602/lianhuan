@@ -5,4 +5,4 @@ WORKDIR /app
 COPY . .
 RUN pip install --no-cache-dir -r requirements.txt
 EXPOSE 8420
-CMD ["sh", "-c", "python -m core.server --lan --port ${PORT:-8420}"]
+CMD ["sh", "-c", "python scripts/restore_seed.py && python -m core.server --lan --port ${PORT:-8420}"]
