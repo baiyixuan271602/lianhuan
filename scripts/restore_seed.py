@@ -4,6 +4,8 @@
 import sys, os, json, base64, urllib.request
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 DB = Path(sys.argv[1] if len(sys.argv) > 1 else "data/lianhuan.db")
 SEED = Path("seed/house.json")
 
