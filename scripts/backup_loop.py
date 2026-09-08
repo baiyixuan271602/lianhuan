@@ -30,6 +30,10 @@ def backup():
     db = Path(os.environ.get("LIANHUAN_DB", "data/lianhuan.db"))
     store = SqliteStore(str(db))
     snap = store.export_all()
+    # 界面填的引擎配置（data/secrets.json，0600）也带上 —— 重建后不用重新贴 key
+    sec_path = db.parent / "secrets.json"
+    if sec_path.exists():
+        snap["secrets_file"] = base64.b64encode(sec_path.read_bytes()).decode()
     content = json.dumps(snap, ensure_ascii=False).encode()
     url = f"https://api.github.com/repos/{REPO}/contents/{FILE}"
     body = {"message": "auto backup", "content": base64.b64encode(content).decode()}
