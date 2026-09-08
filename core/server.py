@@ -1325,7 +1325,7 @@ _MONO_ALLOW = re.compile(
 
 
 @app.post("/api/monopoly/gate")
-def api_monopoly_gate(req: Request):
+async def api_monopoly_gate(req: Request):
     """把 /api/monopoly/gate 收到的请求转发到涩涩大富翁引擎（只放行白名单路径）。
 
     前端棋盘页只读状态 + 动作都走这里（动作默认仍由聊天里的顾衍 MCP 执行，
@@ -1335,7 +1335,7 @@ def api_monopoly_gate(req: Request):
     import urllib.request as _ureq
 
     try:
-        b = req.json() if req.headers.get("content-type", "").startswith("application/json") else {}
+        b = await req.json()
     except Exception:
         b = {}
     method = (b.get("method") or "GET").upper()
