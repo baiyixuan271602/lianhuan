@@ -4064,6 +4064,7 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline-offset:1
     </div>
     <div class="subwrap">
       <p class="lede" style="margin:14px 2px 16px">内置功能装好就在用；外部服务保存配置后要真实调用确认；只有契约的功能可以写进装配单。</p>
+      <button class="pkbtn main" data-open="monopolyPage" type="button" style="width:100%;min-height:46px;margin:0 0 14px">🎲 大富翁游戏台 · 可视化棋盘（在聊天里玩，这里看盘）</button>
       <!-- 引擎：哪家、哪个模型、key 在这儿填。key 存服务端一个 0600 的文件，不进库、不进导出 -->
       <div class="card" style="margin:0 0 14px;padding:15px 16px">
         <b style="display:block;font-size:15px">说话的引擎<small id="engnow" style="margin-left:8px;color:var(--hint);font-weight:400"></small></b>
@@ -4102,6 +4103,127 @@ input:focus-visible,textarea:focus-visible,select:focus-visible{outline-offset:1
         </div>
       </div>
       <div id="packslist"><p class="lede" style="margin:8px 2px">翻一下…</p></div>
+    </div>
+  </div>
+  <!-- ══ 大富翁游戏台（可视化棋盘 · 0910 新增）══ 只读展示+开局向导；动作在聊天里让顾衍做 -->
+  <div class="sub" id="monopolyPage">
+    <div class="top">
+      <button class="iconbtn" data-close="monopolyPage" aria-label="返回"><svg class="i" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
+      <div class="stamp">大富翁游戏台</div>
+    </div>
+    <div class="subwrap">
+      <style>
+        .mp-wrap{--mp-b:var(--card2);--mp-line:var(--line);font-size:13px;padding:2px 0 18px}
+        .mp-wrap b, .mp-wrap .mp-b{color:var(--ink)}
+        .mp-wrap small{color:var(--hint)}
+        .mp-wrap .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin:0 0 12px}
+        .mp-topline{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:2px 2px 10px}
+        .mp-topline .st{font-size:14px;font-weight:700}
+        .mp-topline .sub2{color:var(--hint);font-size:11.5px}
+        .mp-players{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+        .mp-pl{border:1px solid var(--line);border-radius:14px;padding:10px 12px;background:var(--mp-b);position:relative;transition:box-shadow .25s}
+        .mp-pl.on{box-shadow:0 0 0 1.5px var(--maple);border-color:var(--maple)}
+        .mp-pl .nm{font-weight:700;font-size:13.5px;display:flex;align-items:center;gap:6px}
+        .mp-pl .idn{margin-top:2px;font-size:11.5px;color:var(--sub);line-height:1.5}
+        .mp-pl .row{display:flex;justify-content:space-between;margin-top:6px;font-size:12px}
+        .mp-pl .row b{font-size:14px}
+        .mp-pl .hand{font-size:12px;min-height:16px;color:var(--sub)}
+        .mp-turn-tag{position:absolute;top:-7px;right:8px;background:var(--maple);color:#fff;font-size:10px;padding:1px 7px;border-radius:99px}
+        .mp-board{display:grid;grid-template-columns:repeat(10,1fr);gap:4px;margin-bottom:4px}
+        .mp-cell{aspect-ratio:1;border:1px solid var(--line);border-radius:8px;background:var(--mp-b);display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:15px;position:relative;overflow:hidden}
+        .mp-cell .no{position:absolute;top:1px;left:3px;font-size:8px;color:var(--hint)}
+        .mp-cell .ico{font-size:15px;line-height:1}
+        .mp-cell .dot{font-size:9px;line-height:1.2}
+        .mp-cell.goal{border-color:var(--maple);background:color-mix(in srgb,var(--maple) 12%,var(--card2))}
+        .mp-dicebox{display:flex;align-items:center;gap:12px;margin:2px 0 12px;min-height:44px}
+        .mp-die{width:44px;height:44px;border-radius:10px;background:#fff;border:1px solid #d9d4d0;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);padding:7px;box-shadow:0 2px 6px rgba(0,0,0,.12);flex:none;transition:transform .3s}
+        .mp-die i{display:block;width:7px;height:7px;border-radius:99px;background:#2a2a2a;align-self:center;justify-self:center;opacity:0}
+        .mp-die.rolling{animation:mpShake .45s infinite}
+        @keyframes mpShake{0%{transform:rotate(0) scale(1)}25%{transform:rotate(-8deg) scale(1.06)}75%{transform:rotate(8deg) scale(.97)}100%{transform:rotate(0) scale(1)}}
+        .mp-diceinfo{font-size:12.5px;line-height:1.6;color:var(--sub)}
+        .mp-diceinfo b{color:var(--ink)}
+        .mp-log{border:1px dashed var(--line);border-radius:12px;padding:10px 12px;font-size:12.5px;line-height:1.7;color:var(--sub);max-height:140px;overflow:auto;background:var(--mp-b);margin-bottom:12px;white-space:pre-wrap}
+        .mp-log:empty::before{content:'还没有动静 —— 跟顾衍说「掷骰子」/「继续」，这儿的棋盘会自动跟上';color:var(--hint)}
+        .mp-gid{font-size:11px;color:var(--hint);font-family:ui-monospace,Menlo,monospace}
+        .mp-act{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+        .mp-act button{min-height:40px;padding:0 14px;border:1px solid var(--line);border-radius:10px;background:var(--mp-b);color:var(--ink);font:inherit;font-size:13px;cursor:pointer;flex:1;white-space:nowrap}
+        .mp-act button:active{transform:scale(.98)}
+        .mp-act button.main{background:var(--maple);border-color:transparent;color:#fff;font-weight:600}
+        details.mp-rules{margin-bottom:12px}
+        details.mp-rules summary{cursor:pointer;font-weight:600;font-size:13.5px;padding:8px 2px;color:var(--ink)}
+        .mp-rules .rc{background:var(--mp-b);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:12.5px;line-height:1.85;color:var(--sub)}
+        .mp-rules .rc b{color:var(--ink)}
+        .mp-grid2{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+        .mp-fld{display:flex;flex-direction:column;gap:4px}
+        .mp-fld label{font-size:11.5px;color:var(--hint)}
+        .mp-fld input,.mp-fld select{min-height:38px;padding:0 10px;border:1px solid var(--line);border-radius:9px;background:var(--card2);color:var(--ink);font:inherit;font-size:13px}
+        .mp-chk{display:flex;flex-wrap:wrap;gap:6px;margin-top:2px}
+        .mp-chk label{font-size:12px;display:flex;align-items:center;gap:4px;border:1px solid var(--line);border-radius:99px;padding:4px 9px;background:var(--card2);color:var(--sub)}
+        .mp-chk label.on{border-color:var(--maple);color:var(--maple)}
+        .mp-send{min-height:44px;border:none;border-radius:12px;background:var(--maple);color:#fff;font-weight:700;font-size:14px;cursor:pointer;width:100%;margin-top:10px}
+        .mp-warn{font-size:11.5px;color:var(--hint);margin-top:8px;line-height:1.6}
+      </style>
+      <div class="mp-wrap">
+        <div class="mp-topline">
+          <span class="st">🎲 大富翁</span>
+          <span class="sub2" id="mpMeta">还没在玩</span>
+        </div>
+        <div id="mpPlayers" class="mp-players">
+          <div class="card" style="margin:0;text-align:center;color:var(--hint)">先在聊天里让顾衍开一局，<br>或点下面「开新局」让顾衍按你的配置开局</div>
+        </div>
+        <div id="mpBoardWrap" hidden>
+          <div class="mp-board" id="mpBoard"></div>
+        </div>
+        <div class="mp-dicebox" id="mpDiceBox" hidden>
+          <div class="mp-die" id="mpDie"></div>
+          <div class="mp-diceinfo" id="mpDiceInfo">等着掷骰…</div>
+        </div>
+        <div class="mp-log" id="mpLog"></div>
+        <div class="mp-act">
+          <button class="main" data-mp-go="roll">🎲 掷骰子 / 下一轮</button>
+          <button data-mp-go="done">✅ 这轮任务做完了</button>
+          <button data-mp-go="skip">⏭ 跳过这轮</button>
+        </div>
+        <details class="mp-rules" id="mpRulesBox">
+          <summary>📖 怎么玩 · 规则 &amp; 图例</summary>
+          <div class="rc" id="mpRules"></div>
+        </details>
+        <button class="pkbtn main" id="mpNewBtn" type="button" style="width:100%;min-height:46px">开新局 · 按你的配置让顾衍开局</button>
+        <div id="mpSetup" hidden style="margin-top:12px">
+          <div class="card" style="margin:0 0 12px">
+            <b style="font-size:14px">开局配置<small style="display:block;color:var(--hint);font-weight:400;margin-top:2px">填完点下面按钮，指令会发到聊天里，顾衍按它开局</small></b>
+            <div class="mp-grid2" style="margin-top:10px;gap:10px">
+              <div class="mp-fld"><label>你（玩家1）名字</label><input id="mpP1n" value="白艺萱"></div>
+              <div class="mp-fld"><label>你：性别/角色</label><select id="mpP1r"><option value="女/受">女 / 受</option><option value="女/攻">女 / 攻</option><option value="男/受">男 / 受</option><option value="男/攻">男 / 攻</option></select></div>
+              <div class="mp-fld"><label>顾衍（玩家2）名字</label><input id="mpP2n" value="顾衍"></div>
+              <div class="mp-fld"><label>顾衍：性别/角色</label><select id="mpP2r"><option value="男/攻">男 / 攻</option><option value="男/受">男 / 受</option><option value="女/攻">女 / 攻</option><option value="女/受">女 / 受</option></select></div>
+              <div class="mp-fld"><label>强度档 flavor</label><select id="mpFl"><option value="medium">medium（默认·2-5档）</option><option value="light">light（轻·1-3档）</option><option value="heavy">heavy（狠·3-6档）</option></select></div>
+              <div class="mp-fld"><label>局长 game_length</label><select id="mpLen"><option value="24">24（超长·默认）</option><option value="18">18（正常）</option><option value="12">12（速玩）</option></select></div>
+              <div class="mp-fld"><label>反转概率</label><select id="mpRev"><option value="0.3">0.3（偶尔反转·默认）</option><option value="0">0（严守攻受）</option><option value="0.5">0.5（常反转）</option></select></div>
+              <div class="mp-fld"><label>身份模式</label><select id="mpIdn"><option value="mixed">mixed（35张全池·默认）</option><option value="nsfw_only">nsfw_only（只发NSFW）</option><option value="off">off（不发身份）</option></select></div>
+              <div class="mp-fld" style="grid-column:1/-1"><label>红线（都不想要的花样，可多选）</label>
+                <div class="mp-chk" id="mpRed"></div>
+              </div>
+              <div class="mp-fld" style="grid-column:1/-1"><label>后庭 open_anal（默认关；要开就勾选愿意的人）</label>
+                <div class="mp-chk" id="mpAnal"></div>
+              </div>
+              <div class="mp-fld" style="grid-column:1/-1"><label>纯 top no_penetration（只插人不被插）</label>
+                <div class="mp-chk" id="mpTop"></div>
+              </div>
+              <div class="mp-fld" style="grid-column:1/-1"><label>先手 first_player（默认你）</label>
+                <div class="mp-chk" id="mpFirst"></div>
+              </div>
+            </div>
+            <label style="display:flex;gap:8px;align-items:flex-start;margin-top:12px;font-size:12.5px;line-height:1.7;color:var(--sub)">
+              <input type="checkbox" id="mpAck" style="margin-top:2px">
+              <span>我已了解：安全词 <b>404</b> 随时停；任务可以跳过/换一道；红线会全程避开；强度档决定任务到哪一步（medium 会到插入级别）</span>
+            </label>
+            <button class="mp-send" id="mpGoBtn" type="button">把这局配置发给顾衍 → 开局</button>
+            <div class="mp-warn">发送后回到聊天等顾衍开局；他贴出棋盘后，本页会自动认领这局并开始同步。</div>
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--hint);text-align:center;padding-bottom:10px">棋盘/状态每几秒自动同步 · 动作请跟顾衍说（掷骰子 / 做完 / 跳过 / 付钱…）</div>
+      </div>
     </div>
   </div>
   <div class="sub" id="diarypage">
@@ -17666,6 +17788,206 @@ async function loadHome(){
     .catch(function(err){
       console.warn('[开屏] 水面没起来，走纯纸底：', err && err.message);
     });
+})();
+
+/* ══ 大富翁游戏台（可视化棋盘）══ 0910：只读同步 + 开局向导 + 快捷指令；
+   动作本体仍由聊天里的顾衍（MCP）执行，本页不直接改游戏状态，避免双头错账。 */
+(function(){
+  if (!document.getElementById('monopolyPage')) return;
+  var $ = function(id){ return document.getElementById(id); };
+  var S = { gid:null, dice:0, first:true };
+  try { S.gid = localStorage.getItem('mp.gid'); } catch(e){}
+  var saveGid = function(g){ S.gid = g; try { if (g) localStorage.setItem('mp.gid', g); else localStorage.removeItem('mp.gid'); } catch(e){} };
+  var LOG = function(t){ var el = $('mpLog'); if (!el) return; var d = document.createElement('div'); d.textContent = t; el.appendChild(d); while (el.children.length > 60) el.removeChild(el.firstChild); el.scrollTop = el.scrollHeight; };
+  var CHATBUS = (typeof CHAT !== 'undefined') ? CHAT : (window.CHAT || null);
+
+  function gate(method, path, body){
+    return fetch('/api/monopoly/gate', {method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin',
+      body: JSON.stringify({method:method, path:path, body:(body === undefined ? null : body)})})
+      .then(function(r){ return r.json().catch(function(){ return null; }); })
+      .catch(function(){ return null; });
+  }
+  /* ---- 规则/图例（静态，来自官方 manual 精简） ---- */
+  function fillRules(){
+    var el = $('mpRules'); if (!el || el.dataset.filled) return; el.dataset.filled = '1';
+    el.innerHTML =
+      '<b>怎么赢</b>：两人轮流掷骰绕 20 格棋盘走。做任务按强度得币（轻1/中2/狠3/超5）；路过/踩中 🏁起点 +2 币；做完任务占下那格 = 你的地盘，对方踩进来要么交 3 币过路费、要么听你差遣做一道。打满局长回合，金币多的赢 —— 赢家可以让输家执行一道「不能拒绝」的终极指令。<br><br>' +
+      '<b>图例</b>：🏁起点(+2币) · 🎯动作任务 · 🎴机会卡 · ❓未知格(好运/坏运) · 🔒监狱 · 💬真心话 · 🛒商店(3币摸功能卡) · 💥对决(同格)<br>' +
+      '<b>安全</b>：任何时候说 <b>404</b> 游戏立刻停，不追问理由。任务不想做就说一声跳过（不扣币不占地）；想换一道也行（赔对方1币，每局3次）。开局选的红线引擎全程自动避开。攻受可能小概率「反转」，是设计不是 bug。<br>' +
+      '<b>身份</b>：开局每人随机发一张身份卡（Daddy/猫猫/魅魔…整局人设+金币特权），踩 🎴 会换；演不下去每人有一次免费重抽。<br>' +
+      '<b>节奏</b>：掷骰 → 念任务 → 玩 → 玩完说「继续」再掷下一轮（下一轮开头自动结算上一题：+币+占地）。<br>' +
+      '<b>快捷说法</b>：「掷骰子」「这轮做完了/继续」「这轮跳过」「我付过路费/我做了差遣」「抽张卡」「用第N张卡」「换一道」「重抽身份」。';
+  }
+  /* ---- 开局向导 ---- */
+  var REDS = [['anal','肛'],['pain','打'],['bondage','绑'],['toys','玩具'],['public','暴露'],['degrade','羞辱'],['wet','失禁'],['foot','足'],['spit','口水'],['milk','产乳'],['estim','电击'],['dp','双插'],['hypno','催眠'],['wax','蜡']];
+  function chips(host, items, picked){
+    var el = $(host); if (!el || el.dataset.done) return; el.dataset.done = '1';
+    items.forEach(function(it){
+      var k = it[0], lb = it[1];
+      var l = document.createElement('label'); l.textContent = lb; l.dataset.v = k;
+      l.addEventListener('click', function(){ l.classList.toggle('on'); });
+      el.appendChild(l);
+    });
+  }
+  function pickedVals(host){
+    var out = [], el = $(host); if (!el) return out;
+    el.querySelectorAll('label.on').forEach(function(l){ out.push(l.dataset.v); });
+    return out;
+  }
+  function wireSetup(){
+    chips('mpRed', REDS);
+    chips('mpAnal', [['P1','我（玩家1）'],['P2','顾衍（玩家2）']]);
+    chips('mpTop', [['P1','我（玩家1）'],['P2','顾衍（玩家2）']]);
+    chips('mpFirst', [['P1','我（玩家1）先手'],['P2','顾衍（玩家2）先手']]);
+    var nb = $('mpNewBtn'), sb = $('mpGoBtn');
+    if (nb && !nb.dataset.done){ nb.dataset.done='1';
+      nb.addEventListener('click', function(){ var s=$('mpSetup'); s.hidden = !s.hidden; });
+    }
+    if (sb && !sb.dataset.done){ sb.dataset.done='1';
+      sb.addEventListener('click', function(){
+        if (!$('mpAck').checked){ if (typeof toast==='function') toast('先勾选「我已了解」再开局'); else alert('先勾选「我已了解」再开局'); return; }
+        var p1 = ($('mpP1n').value||'').trim() || '白艺萱';
+        var p2 = ($('mpP2n').value||'').trim() || '顾衍';
+        var sr1 = ($('mpP1r').value||'女/受').split('/');
+        var sr2 = ($('mpP2r').value||'男/攻').split('/');
+        var anal = pickedVals('mpAnal').map(function(x){ return x==='P1'?p1:p2; });
+        var top  = pickedVals('mpTop').map(function(x){ return x==='P1'?p1:p2; });
+        var first = pickedVals('mpFirst'); var fp = first.length ? (first[0]==='P1'?p1:p2) : p1;
+        var red = pickedVals('mpRed');
+        var cfg = {
+          p1_name:p1, p1_sex:sr1[0], p1_role:sr1[1],
+          p2_name:p2, p2_sex:sr2[0], p2_role:sr2[1],
+          flavor:$('mpFl').value, game_length:+$('mpLen').value,
+          reverse_chance:+$('mpRev').value, identity_mode:$('mpIdn').value,
+          redline:red, open_anal:anal, no_penetration:top, first_player:fp
+        };
+        var redTxt = red.length ? red.map(function(k){ return REDS.filter(function(r){return r[0]===k;})[0][1]; }).join('、') : '无';
+        var msg = '【开局向导】顾衍，按这套配置开一局大富翁，参数如下，规则和安全词我已确认（404随时停、可跳过可换题、红线避开）：\n' +
+          JSON.stringify(cfg, null, 1) + '\n请开局（setup_confirmed），开好后把棋盘和身份贴出来。';
+        if (CHATBUS && CHATBUS.send){
+          CHATBUS.send(msg).then(function(ok){ LOG(ok ? '已发给顾衍开局 —— 等他贴棋盘，本页自动认领' : '发送没成功，再试一次？'); }).catch(function(){ LOG('发送失败，请手动把配置发给顾衍'); });
+        } else { LOG('聊天还没就绪，请手动复制这条给顾衍：\n' + msg); }
+        var st2=$('mpSetup'); if(st2) st2.hidden = true;
+      });
+    }
+  }
+  /* ---- 聊天流 → 认领局 / 骰子 / 日志 ---- */
+  function hookSay(){
+    if (!CHATBUS || !CHATBUS.on) return;
+    try {
+      CHATBUS.on(function(type, d){
+        if (type !== 'say' || !d || !d.text) return;
+        var t = d.text;
+        /* 认领局号：顾衍贴出「局号/房间号/game_id xxxxxxxx」或大富翁棋盘时抓 8 位 hex */
+        var m = t.match(/(?:局号|房间号|game[ _-]?id|编号|对局)[:：\s]*([0-9a-f]{8})/i);
+        if (!m && /大富翁|🎲|掷/.test(t)) m = t.match(/\b([0-9a-f]{8})\b/);
+        if (m && m[1] && m[1] !== S.gid){
+          var cand = m[1];
+          gate('GET', '/state/' + cand).then(function(d){
+            if (d && d.board){ saveGid(cand); LOG('已自动认领这局（' + cand + '），棋盘开始同步'); pollNow(); }
+          });
+        }
+        /* 骰子：🎲 … 掷 N */
+        var dm = t.match(/🎲[^\d。\n]{0,16}?(\d)/) || t.match(/掷(?:了|出|到)?[^\d。\n]{0,5}?(\d)/);
+        if (dm && /🎲|掷/.test(t) && t.length < 200) showDice(+(dm[1] || 0));
+        /* 日志滚动（只收短的、游戏相关的行） */
+        if (t.length < 300 && /🎲|棋盘|格|币|身份|任务|真心话|监狱|商店|抽到|过路费|差遣|对决|赢|回合|404|掷/.test(t)){
+          LOG(t.split('\n')[0]);
+        }
+      });
+    } catch(e){}
+  }
+  /* ---- 骰子 ---- */
+  var DIE_MAP = {1:[4],2:[0,8],3:[0,4,8],4:[0,2,6,8],5:[0,2,4,6,8],6:[0,2,3,5,6,8]};
+  function drawDie(n){
+    var el = $('mpDie'); if (!el) return;
+    el.innerHTML = ''; el.classList.remove('rolling');
+    var dots = DIE_MAP[n] || [];
+    for (var i=0;i<9;i++){ var x=document.createElement('i'); if (dots.indexOf(i)>=0) x.style.opacity='1'; el.appendChild(x); }
+  }
+  function showDice(n){
+    if (!n || n<1 || n>6) return;
+    var box=$('mpDiceBox'), info=$('mpDiceInfo'); if(!box) return;
+    box.hidden = false;
+    var die=$('mpDie'); die.classList.add('rolling');
+    var r=0; var iv=setInterval(function(){ drawDie(1+Math.floor(Math.random()*6)); die.classList.add('rolling'); if(++r>=6){ clearInterval(iv); drawDie(n); die.classList.remove('rolling'); if(info) info.innerHTML='掷出 <b>'+n+'</b> 点'; } }, 120);
+    if (info) info.innerHTML='掷骰中…';
+    S.dice = n;
+  }
+  /* ---- 棋盘渲染 ---- */
+  var TILES = ['🏁','🎯','🎴','❓','🔒','💬','🛒'];
+  function cellType(txt){ for (var i=0;i<TILES.length;i++){ if (txt.indexOf(TILES[i])>=0) return TILES[i]; } return '🎯'; }
+  function render(d){
+    var wrap=$('mpBoardWrap'); if(!wrap) return;
+    var lines=(d.board||'').split('\n');
+    var first=lines[0]||'';
+    var cells=[]; var re=/［([^］]*)］/g; var mm;
+    while((mm=re.exec(first))) cells.push(mm[1]);
+    var tm=first.match(/〔\s*回合\s*(\d+)\s*\/\s*(\d+)/);
+    var players=[];
+    for(var i=1;i<lines.length;i++){
+      var ln=lines[i]||''; var pm=ln.match(/^([🔵🔴])([^@]+?)@(\d+)(?:\(第(\d+)圈\))?[^💰]*💰(\d+)[^🃏]*🃏［([^］]*)］[^:]*[:：]?(.*)$/);
+      if(pm) players.push({c:pm[1], n:pm[2].trim(), p:+pm[3], lap:+(pm[4]||0), coin:+pm[5], hand:(pm[6]||'').trim(), idn:(pm[7]||'').trim()});
+    }
+    /* meta */
+    var meta=$('mpMeta'); if(meta) meta.textContent = (tm?('回合 '+tm[1]+'/'+tm[2]):'') + (S.gid?(' · '+S.gid):'');
+    /* 玩家卡 */
+    var host=$('mpPlayers'); if(!host) return;
+    host.innerHTML='';
+    if(!players.length){ host.innerHTML='<div class="card" style="margin:0;text-align:center;color:var(--hint)">状态读取中…</div>'; }
+    players.forEach(function(pl){
+      var isTurn = d.turn && pl.n.indexOf(d.turn)>=0;
+      var card=document.createElement('div'); card.className='mp-pl'+(isTurn?' on':'');
+      card.innerHTML = '<div class="nm">'+pl.c+' '+pl.n.replace(/</g,'&lt;')+(isTurn?'<span class="mp-turn-tag">该你了</span>':'')+'</div>'+
+        '<div class="idn">'+(pl.idn||'').replace(/</g,'&lt;')+'</div>'+
+        '<div class="row"><span>金币</span><b>💰 '+pl.coin+'</b></div>'+
+        '<div class="row"><span>位置</span><b>@'+pl.p+'（第'+pl.lap+'圈）</b></div>'+
+        '<div class="hand">手牌：'+(pl.hand && pl.hand!=='空'?pl.hand:'空')+'</div>';
+      host.appendChild(card);
+    });
+    /* 棋盘 */
+    var bd=$('mpBoard'); bd.innerHTML='';
+    cells.forEach(function(txt,i){
+      var c=document.createElement('div'); c.className='mp-cell'+(i===0?' goal':'');
+      var tp=cellType(txt); var hasB=txt.indexOf('🔵')>=0, hasR=txt.indexOf('🔴')>=0;
+      c.innerHTML='<span class="no">'+(i+1)+'</span><span class="ico">'+tp+'</span><span class="dot">'+(hasB&&hasR?'🔵🔴':hasB?'🔵':hasR?'🔴':'')+'</span>';
+      bd.appendChild(c);
+    });
+    wrap.hidden=false;
+    $('mpDiceBox').hidden=false;
+    if(S.first){ S.first=false; if(!S.dice) $('mpDiceInfo').textContent='等顾衍掷骰后，点数会显示在这儿'; }
+  }
+  /* ---- 轮询 ---- */
+  var T=null;
+  function pollNow(){ if(T){clearTimeout(T); T=null;} poll(); }
+  function poll(){
+    if(!S.gid){ T=setTimeout(poll,8000); return; }
+    gate('GET','/state/'+S.gid).then(function(d){
+      if(d && d.board) render(d);
+    }).catch(function(){}).then(function(){ T=setTimeout(poll,5000); });
+  }
+  /* ---- 快捷动作按钮（发指令给顾衍，不改状态） ---- */
+  function wireActs(){
+    var acts={ roll:'🎲 掷骰子，继续', done:'这轮玩完了，继续下一轮', skip:'这轮任务跳过，继续' };
+    document.addEventListener('click', function(e){
+      var b=e.target.closest && e.target.closest('[data-mp-go]');
+      if(!b) return;
+      var k=b.getAttribute('data-mp-go'); var txt=acts[k]; if(!txt) return;
+      if(!CHATBUS || !CHATBUS.send){ LOG('聊天没就绪'); return; }
+      CHATBUS.send(txt).then(function(ok){ LOG(ok?('已说：'+txt):'发送没成功'); }).catch(function(){ LOG('发送失败'); });
+    });
+    /* 打开页面时启动 */
+    document.addEventListener('click', function(e){
+      var o=e.target.closest && e.target.closest('[data-open="monopolyPage"]');
+      if(o){ fillRules(); wireSetup(); hookSay(); pollNow(); }
+    });
+  }
+  /* 初始化入口：若页面初始就 open（刷新后回到该页），也起一次 */
+  function boot(){
+    fillRules(); wireSetup(); hookSay();
+    if(document.getElementById('monopolyPage').classList.contains('on')) pollNow();
+  }
+  try { wireActs(); boot(); } catch(e){ console.warn('[大富翁台] init:', e); }
 })();
 </script>
 
