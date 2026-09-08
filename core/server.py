@@ -1347,7 +1347,7 @@ async def api_monopoly_gate(req: Request):
         return JSONResponse({"error": "path"}, status_code=400)
     if not _MONO_ALLOW.match(path):
         return JSONResponse({"error": "path not allowed"}, status_code=403)
-    base = os.environ.get("SPICY_MONOPOLY_BASE", "https://spicy-monopoly-api.onrender.com")
+    base = os.environ.get("SPICY_MONOPOLY_BASE", "https://spicy-monopoly.lol")
     r2 = _ureq.Request(base + path, method=method)
     r2.add_header("Content-Type", "application/json")
     r2.add_header("Accept", "application/json, text/event-stream")
