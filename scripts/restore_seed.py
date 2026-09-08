@@ -20,6 +20,14 @@ house = json.loads(SEED.read_text(encoding="utf-8"))
 r = store.import_all(house, "merge")
 print("restored seed:", r)
 
+# 引擎固化：重建后别掉回 echo 假AI。环境变量里有 DeepSeek key 就用 api 引擎。
+try:
+    if not (store.get_setting("engine", "") or ""):
+        store.set_setting("engine", "api")
+        print("engine set: api")
+except Exception as e:
+    print("engine set fail:", e)
+
 token = os.environ.get("LIANHUAN_GITHUB_TOKEN", "")
 if token:
     try:
