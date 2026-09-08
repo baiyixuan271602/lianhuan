@@ -1,0 +1,18 @@
+name: keepalive
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch: {}
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping all services
+        run: |
+          for u in \
+            https://lianhuan-jtps.onrender.com/ \
+            https://spicy-monopoly-mcp.onrender.com/ \
+            https://zhangxinchuang-mcp-3mdm.onrender.com/ \
+            https://zhangxinchuang-server-unno.onrender.com/health ; do
+            curl -s -o /dev/null -m 55 -w "%{http_code} $u\n" -L "$u" || true
+          done
