@@ -72,37 +72,44 @@ class _Server:
         self.err = ""
         self._id = 0
         self._lock = asyncio.Lock()
-
+        self._start_lock = asyncio.Lock()
     async def start(self) -> None:
         # 远程 MCP 冷启动可能要几十秒，失败自动重试（最多 4 次、间隔 15 秒）。
-        last = ""
-        for attempt in range(4):
-            try:
-                env = dict(os.environ)
-                env.update(self.spec.get("env") or {})
-                self.proc = await asyncio.create_subprocess_exec(
-                    self.spec["command"], *(self.spec.get("args") or []),
-                    stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.DEVNULL, env=env,
-                    limit=8 * 1024 * 1024)
-                await self._rpc("initialize", {
-                    "protocolVersion": "2024-11-05", "capabilities": {},
-                    "clientInfo": {"name": "lianhuan", "version": "0.1"}}, timeout=120)
-                await self._notify("notifications/initialized")
-                r = await self._rpc("tools/list", {}, timeout=120)
-                self.tools = (r or {}).get("tools") or []
-                if self.tools:
-                    self.err = ""
-                    return
-                last = "工具清单为空"
-            except Exception as e:
-                last = f"{type(e).__name__}: {e}"[:160]
-            await self.close()
-            if attempt < 3:
-                await asyncio.sleep(15)
-        self.err = last
+        # start 并发会互相 close 对方的进程（proc 被置 None，另一路还在写 stdin），
+        # 所以整个 start 用 _start_lock 串行化。
+        async with self._start_lock:
+            last = ""
+            for attempt in range(4):
+                try:
+                    env = dict(os.environ)
+                    env.update(self.spec.get("env") or {})
+                    proc = await asyncio.create_subprocess_exec(
+                        self.spec["command"], *(self.spec.get("args") or []),
+                        stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.DEVNULL, env=env,
+                        limit=8 * 1024 * 1024)
+                    self.proc = proc
+                    await self._rpc("initialize", {
+                        "protocolVersion": "2024-11-05", "capabilities": {},
+                        "clientInfo": {"name": "lianhuan", "version": "0.1"}}, timeout=120)
+                    await self._notify("notifications/initialized")
+                    r = await self._rpc("tools/list", {}, timeout=120)
+                    tools = (r or {}).get("tools") or []
+                    if tools:
+                        self.tools = tools
+                        self.err = ""
+                        return
+                    last = "工具清单为空"
+                except Exception as e:
+                    last = f"{type(e).__name__}: {e}"[:160]
+                await self.close()
+                if attempt < 3:
+                    await asyncio.sleep(15)
+            self.err = last
 
     async def _send(self, msg: dict) -> None:
+        if self.proc is None:
+            raise RuntimeError("MCP 未连接")
         self.proc.stdin.write((json.dumps(msg, ensure_ascii=False) + "\n").encode())
         await self.proc.stdin.drain()
 
@@ -143,6 +150,7 @@ class _Server:
         return {"ok": not (r or {}).get("isError"), "result": txt}
 
     async def close(self) -> None:
+        self.tools = []                      # 进程没了，旧工具清单作废（否则状态显示"已连"却在写 None）
         p, self.proc = self.proc, None
         if p and p.returncode is None:
             try:
@@ -165,11 +173,13 @@ async def start_all() -> None:
 
 
 async def _watchdog() -> None:
-    # 看门狗：没连上的 server 每 45 秒自动重连一次，直到连上。
+    # 看门狗：断开的 server 每 45 秒自动重连一次，直到连上。
+    # 断开的两种情况：proc 是 None（start 失败/被 close）；进程已死但对象还在。
     while True:
         await asyncio.sleep(45)
         for name, s in list(_servers.items()):
-            if not s.tools and s.proc is None:
+            dead = s.proc is not None and s.proc.returncode is not None
+            if (s.proc is None or dead) and not s._start_lock.locked():
                 try:
                     await s.start()
                 except Exception:
