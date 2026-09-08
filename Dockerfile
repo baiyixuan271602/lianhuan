@@ -11,4 +11,4 @@ COPY . .
 
 EXPOSE 8420
 
-CMD ["sh", "-c", "python scripts/restore_seed.py && (python scripts/backup_loop.py > /tmp/backup.log 2>&1 &) && python -m core.server --lan --port ${PORT:-8420}"]
+CMD ["sh", "-c", "python scripts/restore_seed.py && (until python scripts/backup_loop.py >> /tmp/backup.log 2>&1; do echo 'backup_loop exited, restarting' >> /tmp/backup.log; sleep 5; done &) && python -m core.server --lan --port ${PORT:-8420}"]
