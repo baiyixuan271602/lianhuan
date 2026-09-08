@@ -38,7 +38,13 @@ if token:
         with urllib.request.urlopen(req, timeout=60) as resp:
             meta = json.loads(resp.read().decode())
         backup = json.loads(base64.b64decode(meta["content"]).decode("utf-8"))
+        sec_b64 = backup.pop("secrets_file", None)
         r2 = store.import_all(backup, "merge")
         print("restored backup:", r2)
+        if sec_b64:
+            sec = Path(DB).parent / "secrets.json"
+            sec.write_bytes(base64.b64decode(sec_b64))
+            os.chmod(sec, 0o600)
+            print("restored secrets.json")
     except Exception as e:
         print("no backup or fail:", e)
