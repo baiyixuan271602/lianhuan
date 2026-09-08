@@ -49,7 +49,7 @@ def main():
             print("backup ok:", backup(), flush=True)
         except Exception as e:
             print("backup fail:", e, flush=True)
-        time.sleep(600)
+        time.sleep(180)
 
 
 if __name__ == "__main__":
