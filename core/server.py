@@ -1312,6 +1312,64 @@ def api_mcp():
     return {"servers": _mcp.status()}
 
 
+# ══ 大富翁游戏台 ══ 给前端小程序页用的代理：只转发 spicy-monopoly 的公开端点。
+# 动作仍由聊天里的 MCP（顾衍）执行；这个代理让页面能读到棋盘/状态/掷骰结果做可视化。
+_MONO_ALLOW = re.compile(
+    r"^(/(help|new_game|manual/api|state/[^/]+|roll/[^/]+|skip/[^/]+|buyout/[^/]+"
+    r"|pay_toll/[^/]+/[^/]+|serve_toll/[^/]+/[^/]+|buy_card/[^/]+/[^/]+"
+    r"|use_card/[^/]+/[^/]+/[0-9]+|discard/[^/]+/[^/]+/[0-9]+|swap/[^/]+/[^/]+"
+    r"|reroll_identity/[^/]+/[^/]+|reroll_task/[^/]+/[^/]+|duel_result/[^/]+/[^/]+"
+    r"|buy/[^/]+/[^/]+|done/[^/]+/[^/]+|declare_persona/[^/]+/[^/]+"
+    r"|id_event/[^/]+/[^/]+/[^/]+|extra_task/[^/]+/[^/]+|guess_mark/[^/]+/[^/]+/[^/]+"
+    r"|final_result/[^/]+|games|seen/[^/]+))$", re.I)
+
+
+@app.post("/api/monopoly/gate")
+def api_monopoly_gate(req: Request):
+    """把 /api/monopoly/gate 收到的请求转发到涩涩大富翁引擎（只放行白名单路径）。
+
+    前端棋盘页只读状态 + 动作都走这里（动作默认仍由聊天里的顾衍 MCP 执行，
+    页面不主动替玩家做动作，避免双头操作错账）。
+    """
+    import urllib.error as _uer
+    import urllib.request as _ureq
+
+    try:
+        b = req.json() if req.headers.get("content-type", "").startswith("application/json") else {}
+    except Exception:
+        b = {}
+    method = (b.get("method") or "GET").upper()
+    path = (b.get("path") or "").strip()
+    payload = b.get("body")
+    if method not in ("GET", "POST", "DELETE"):
+        return JSONResponse({"error": "method"}, status_code=400)
+    if not path.startswith("/") or not re.match(r"^/[A-Za-z0-9_/.\-]+$", path):
+        return JSONResponse({"error": "path"}, status_code=400)
+    if not _MONO_ALLOW.match(path):
+        return JSONResponse({"error": "path not allowed"}, status_code=403)
+    base = os.environ.get("SPICY_MONOPOLY_BASE", "https://spicy-monopoly-api.onrender.com")
+    r2 = _ureq.Request(base + path, method=method)
+    r2.add_header("Content-Type", "application/json")
+    r2.add_header("Accept", "application/json, text/event-stream")
+    data = None
+    if payload is not None:
+        data = json.dumps(payload).encode()
+    try:
+        with _ureq.urlopen(r2, data=data, timeout=90) as r:
+            raw = r.read().decode()
+        try:
+            return JSONResponse(json.loads(raw))
+        except Exception:
+            return JSONResponse({"raw": raw[:4000]})
+    except _uer.HTTPError as e:
+        try:
+            return JSONResponse(json.loads(e.read().decode()), status_code=e.code)
+        except Exception:
+            return JSONResponse({"error": "upstream http " + str(e.code)}, status_code=e.code)
+    except Exception as e:
+        return JSONResponse({"error": "upstream: " + str(e)}, status_code=502)
+
+
 @app.post("/api/mcp/add")
 async def api_mcp_add(req: Request):
     """登记一条 MCP server。★ 命令是用户自己贴的 —— 等于自己运行一个程序，
