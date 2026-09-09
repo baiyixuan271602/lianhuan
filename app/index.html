@@ -17306,13 +17306,35 @@ async function loadHome(){
       var box = document.getElementById('mcplist');
       if (!box) return;
       var svs = d.servers || [];
+      var down = svs.filter(function(s){ return !s.ok; });
       box.innerHTML = svs.length ? svs.map(function(s){
         return '<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px dashed var(--line)">'
           + '<b style="font-size:13px">' + esc(s.name) + '</b>'
-          + '<small style="color:var(--hint);flex:1">' + (s.ok ? (s.tools.length + ' 个工具：' + s.tools.slice(0,4).join('、') + (s.tools.length>4?'…':'')) : ('没连上：' + esc(s.err||''))) + '</small>'
+          + '<small style="color:var(--hint);flex:1">' + (s.ok ? (s.tools.length + ' 个工具：' + s.tools.slice(0,4).join('、') + (s.tools.length>4?'…':'')) : ('没连上：' + esc(s.err||'') + (s.ok===false && down.length?' — 正在自动重连，稍等十几秒…':''))) + '</small>'
+          + (!s.ok ? '<button class="pkbtn" style="min-height:32px;padding:0 10px" data-mcp-retry="' + esc(s.name) + '">重连</button>' : '')
           + '<button class="pkbtn" style="min-height:32px;padding:0 10px" data-mcp-del="' + esc(s.name) + '">删</button></div>';
       }).join('') : '<small style="color:var(--hint)">还没登记过。</small>';
+      /* ★ 冷启动后上游也在醒：看到有断开的就主动拉一把 + 每 12 秒刷新状态，直到全连上。
+         限流：8 秒内不重复触发重连。 */
+      if (down.length){
+        var now = Date.now();
+        if (!window.__mcpRetryAt || now - window.__mcpRetryAt > 8000){
+          window.__mcpRetryAt = now;
+          fetch('/api/mcp/retry', {method:'POST', credentials:'same-origin'}).catch(function(){});
+        }
+        clearTimeout(window.__mcpAutoT);
+        window.__mcpAutoT = setTimeout(function(){ load(); }, 12000);
+      }
     }).catch(function(){});
+    /* 手动重连按钮 */
+    document.addEventListener('click', function(e){
+      var rb = e.target.closest && e.target.closest('[data-mcp-retry]');
+      if (!rb) return;
+      rb.disabled = true; var old = rb.textContent; rb.textContent = '连着…';
+      fetch('/api/mcp/retry', {method:'POST', credentials:'same-origin'})
+        .then(function(){ setTimeout(function(){ load(); }, 6000); })
+        .catch(function(){ rb.disabled = false; rb.textContent = old; });
+    });
     var proto = document.getElementById('engproto');
     if (proto && !proto.__wired){ proto.__wired = true;
       proto.addEventListener('click', function(e){
