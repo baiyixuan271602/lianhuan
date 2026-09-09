@@ -1312,6 +1312,17 @@ def api_mcp():
     return {"servers": _mcp.status()}
 
 
+@app.post("/api/mcp/retry")
+async def api_mcp_retry():
+    """立即重连所有断开的 MCP server（不用等 45 秒看门狗）。
+
+    连环冷启动后上游 MCP（Render 上的桥/服务）也在冷启动，要几十秒才醒；
+    前端功能包页打开时若看到断开，会调这个端点主动拉一把。
+    """
+    await _mcp.start_all()
+    return {"ok": True}
+
+
 # ══ 大富翁游戏台 ══ 给前端小程序页用的代理：只转发 spicy-monopoly 的公开端点。
 # 动作仍由聊天里的 MCP（顾衍）执行；这个代理让页面能读到棋盘/状态/掷骰结果做可视化。
 _MONO_ALLOW = re.compile(
