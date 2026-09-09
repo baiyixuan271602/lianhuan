@@ -30,21 +30,40 @@ except Exception as e:
 
 token = os.environ.get("LIANHUAN_GITHUB_TOKEN", "")
 if token:
-    try:
-        req = urllib.request.Request(
-            "https://api.github.com/repos/baiyixuan271602/lianhuan-backup/contents/chat_backup.json")
-        req.add_header("Authorization", "Bearer " + token)
-        req.add_header("Accept", "application/vnd.github+json")
-        with urllib.request.urlopen(req, timeout=60) as resp:
-            meta = json.loads(resp.read().decode())
-        backup = json.loads(base64.b64decode(meta["content"]).decode("utf-8"))
-        sec_b64 = backup.pop("secrets_file", None)
-        r2 = store.import_all(backup, "merge")
-        print("restored backup:", r2)
-        if sec_b64:
-            sec = Path(DB).parent / "secrets.json"
-            sec.write_bytes(base64.b64decode(sec_b64))
-            os.chmod(sec, 0o600)
-            print("restored secrets.json")
-    except Exception as e:
-        print("no backup or fail:", e)
+    # ★ 冷启动恢复是命门：只试一次、失败就空库启动，会被 backup_loop 用"空"覆盖掉好备份。
+    #   改为重试 3 次；仍失败就立一个 flag，backup_loop 看到 flag 就不会拿空库覆盖远端备份。
+    fail_flag = Path(DB).parent / ".restore_failed"
+    for attempt in range(3):
+        try:
+            req = urllib.request.Request(
+                "https://api.github.com/repos/baiyixuan271602/lianhuan-backup/contents/chat_backup.json")
+            req.add_header("Authorization", "Bearer " + token)
+            req.add_header("Accept", "application/vnd.github+json")
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                meta = json.loads(resp.read().decode())
+            backup = json.loads(base64.b64decode(meta["content"]).decode("utf-8"))
+            sec_b64 = backup.pop("secrets_file", None)
+            r2 = store.import_all(backup, "merge")
+            print("restored backup:", r2)
+            if sec_b64:
+                sec = Path(DB).parent / "secrets.json"
+                sec.write_bytes(base64.b64decode(sec_b64))
+                os.chmod(sec, 0o600)
+                print("restored secrets.json")
+            try:
+                fail_flag.unlink()
+            except Exception:
+                pass
+            break
+        except Exception as e:
+            print(f"backup restore fail (try {attempt + 1}/3):", e)
+            if attempt < 2:
+                import time as _t
+                _t.sleep(5)
+    else:
+        # 三次都失败：立 flag 防覆盖，服务照起（用户还能聊新的，旧账本等手动救）
+        try:
+            fail_flag.write_text("restore failed at startup\n")
+        except Exception:
+            pass
+        print("!!! RESTORE FAILED after 3 tries — backup_loop will NOT overwrite remote backup while flag exists")
