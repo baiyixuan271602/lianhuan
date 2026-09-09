@@ -34,13 +34,28 @@ def backup():
     sec_path = db.parent / "secrets.json"
     if sec_path.exists():
         snap["secrets_file"] = base64.b64encode(sec_path.read_bytes()).decode()
-    content = json.dumps(snap, ensure_ascii=False).encode()
     url = f"https://api.github.com/repos/{REPO}/contents/{FILE}"
+    # ★ 防覆盖①：冷启动恢复失败时立了 flag —— 绝不用空库覆盖远端的好备份
+    flag = db.parent / ".restore_failed"
+    if flag.exists():
+        print("skip backup: restore_failed flag present", flush=True)
+        return "skip(flag)"
+    content = json.dumps(snap, ensure_ascii=False).encode()
     body = {"message": "auto backup", "content": base64.b64encode(content).decode()}
     try:
         meta = gh("GET", url)
         if meta.get("sha"):
             body["sha"] = meta["sha"]
+        # ★ 防覆盖②：本地账本全空、远端却有数据 —— 大概率是空库启动/恢复没跟上，
+        #   这趟先不覆盖，保住远端那一份（下一轮本地有数据了再正常备份）。
+        if not (snap.get("turns") or snap.get("memories")):
+            try:
+                remote = json.loads(base64.b64decode(meta.get("content") or "").decode("utf-8"))
+                if (remote.get("turns") or remote.get("memories")):
+                    print("skip backup: local empty but remote has data", flush=True)
+                    return "skip(local_empty)"
+            except Exception:
+                pass
     except Exception:
         pass
     gh("PUT", url, body)
