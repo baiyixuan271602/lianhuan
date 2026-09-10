@@ -1305,6 +1305,8 @@ async def _mcp_startup():
     await _mcp.start_all()          # 连用户登记的 MCP server（没配就一个不连）
     # 主动找你的后台骰子。滑钮是 0（默认）时它每拍都直接睡回去，等于不存在
     asyncio.create_task(_proactive.run_forever())
+    # 冷启动恢复自愈：启动时恢复没跟上（flag 在）就后台继续补，记录自动回来
+    asyncio.create_task(_self_heal_restore())
 
 
 @app.get("/api/mcp")
@@ -1321,6 +1323,56 @@ async def api_mcp_retry():
     """
     await _mcp.start_all()
     return {"ok": True}
+
+
+async def _self_heal_restore() -> None:
+    """冷启动恢复自愈：restore_seed 三次都失败时会立一个 flag。
+
+    这里在服务起来之后继续每分钟重试一次（最多 30 次），一旦网络恢复就把
+    备份里的账本 merge 回来 —— 人开着页面的时候记录就自动回来了，不用手动救。
+    """
+    import base64 as _b64
+    import urllib.request as _u
+
+    flag = Path("data") / ".restore_failed"
+    if not flag.exists():
+        return
+    token = os.environ.get("LIANHUAN_GITHUB_TOKEN", "")
+    if not token:
+        return
+    for i in range(30):
+        await asyncio.sleep(60)
+        try:
+            # 库已经有东西（人聊了新天）就不覆盖式回灌，只在"还空着"时补
+            try:
+                probe = store.recent_turns(1)
+                if probe:
+                    flag.unlink()
+                    print("[self-heal] 库已有数据，撤 flag", flush=True)
+                    return
+            except Exception:
+                pass
+
+            def _fetch() -> dict:
+                rq = _u.Request(
+                    "https://api.github.com/repos/baiyixuan271602/lianhuan-backup/contents/chat_backup.json")
+                rq.add_header("Authorization", "Bearer " + token)
+                rq.add_header("Accept", "application/vnd.github+json")
+                with _u.urlopen(rq, timeout=60) as r:
+                    return json.loads(r.read().decode())
+
+            meta = await asyncio.to_thread(_fetch)
+            backup = json.loads(_b64.b64decode(meta["content"]).decode("utf-8"))
+            backup.pop("secrets_file", None)
+            r = await asyncio.to_thread(store.import_all, backup, "merge")
+            print("[self-heal] restored:", r, flush=True)
+            try:
+                flag.unlink()
+            except Exception:
+                pass
+            return
+        except Exception as e:
+            print(f"[self-heal] retry {i + 1}/30: {e}", flush=True)
 
 
 # ══ 大富翁游戏台 ══ 给前端小程序页用的代理：只转发 spicy-monopoly 的公开端点。
